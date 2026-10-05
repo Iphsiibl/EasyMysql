@@ -6,9 +6,9 @@
 [![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **📌 项目状态**：实验环境已跑通（8 张表 / 80 万行 / 全部 SQL 验证通过），
+> **📌 项目状态**：实验环境（Docker）已跑通
 > **23 篇正文的选题表、大纲和配套实验文件已就位，正文正在逐篇撰写中**。
-> 进度见 [NOTES.md](NOTES.md)。欢迎认领你需要的篇目。
+> 进度见 [NOTES.md](NOTES.md)。欢迎学习你需要的篇目。
 
 ---
 
@@ -24,16 +24,10 @@
 
 一句话：**别人的教程让你"看懂"，这个仓库让你"看穿"**。
 
-## 适合谁 / 不适合谁
+## 适合谁
 
 ✅ 适合
-- 上了数据库课但实验报告只能抄同学的
-- 正在学 Java / Python / Go，需要懂数据库的
-- 面试被问「索引是什么」答不上来
-
-❌ 不适合
-- 已经是 DBA，要看 8.0 内核源码
-- 想找生产级高可用架构方案（主从、分库分表，另有专门的书）
+- 0 基础想学mysql和sql知识的小白
 
 ## 先花 3 分钟跑起来
 
