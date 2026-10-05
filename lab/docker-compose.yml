@@ -1,0 +1,37 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: easy-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: easy123
+      MYSQL_DATABASE: easy_mysql
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --log-bin=binlog
+      - --slow_query_log=1
+      - --long_query_time=0.2
+    volumes:
+      - ./init:/docker-entrypoint-initdb.d:ro
+      - ./.data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-peasy123"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # 图形界面：浏览器打开 http://localhost:8080
+  # 账号 easy / easy123
+  adminer:
+    image: adminer:4
+    container_name: easy-mysql-adminer
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    ports:
+      - "8080:8080"

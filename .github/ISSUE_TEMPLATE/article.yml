@@ -1,0 +1,28 @@
+name: 新增或改进一篇教程
+about: 提交一篇新文章、修正现有文章、或补充实验数据
+title: "[文章] "
+labels: ["content"]
+body: |
+  ## 这篇（或这次改动）解决什么问题
+
+  填「一句话价值」那一句。
+
+  ## 改动清单
+
+  - [ ] `docs/NN-slug.md` 新增或修改的文章
+  - [ ] `lab/queries/NN-demo-xxx.sql` 配套的实验文件
+  - [ ] `NOTES.md` 更新了状态
+  - [ ] 更新了前后篇的「上一篇 / 下一篇」链接
+
+  ## 自查清单（对应 docs/_TEMPLATE.md 的发稿前自查）
+
+  - [ ] 所有 SQL 自己跑过，输出是原文粘贴的
+  - [ ] 结论用 `EXPLAIN` 的 `rows` 支撑，而不是写死耗时
+  - [ ] 改过索引/约束/数据的，实验文件末尾恢复了原状
+  - [ ] 单篇不超过 2000 字
+  - [ ] 跑过 `powershell -ExecutionPolicy Bypass -File lab/verify-queries.ps1`
+  - [ ] 全文搜过「大概」「应该」「一般来说」这类含糊词
+
+  ## 说明
+
+  （可选：为什么这样写、参考了哪些资料）
