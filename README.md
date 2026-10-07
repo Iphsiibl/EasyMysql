@@ -67,8 +67,6 @@ docker compose up -d
 
 ## 配套数据长什么样
 
-教程里所有表都已经建好、数据已经灌好（80 万行，一次性生成，约 20 秒）：
-
 | 表 | 行数 | 干什么用 |
 |---|---:|---|
 | `students` | 200 | 阶段 ② 查成绩，阶段 ③ 建表设计 |
@@ -82,25 +80,6 @@ docker compose up -d
 
 `orders` 和 `orders_slow` 这对「双胞胎表」是这个仓库的核心设计：**结构一样、数据一样，唯一区别是一个有索引一个没有**，所以任何性能对比都是干净的，不需要你相信作者的话。
 
-## 已经验证过的实验数据
-
-这些数字是在 MySQL 8.0.46 上真实跑出来的。**耗时因机器而异，但「扫描行数」是稳定的，那个才值得记。**
-
-```sql
-SET profiling = 1;
-SELECT COUNT(*) FROM orders_slow WHERE user_id = 42;   -- 0.024s，扫 199430 行
-SELECT COUNT(*) FROM orders      WHERE user_id = 42;   -- 0.0003s，扫     29 行
-SHOW PROFILES;
-```
-
-| | `orders_slow`（无索引） | `orders`（有索引） |
-|---|---|---|
-| `type` | `ALL`（全表扫描） | `ref`（走索引） |
-| `key` | `NULL` | `idx_orders_user` |
-| **rows（扫描行数）** | **199430** | **29** |
-| 耗时（本机实测） | ~0.024 s | ~0.0003 s |
-
-扫描行数差了 6874 倍。完整实验在 [第 13 篇](docs/13-index-what.md)。
 
 ## 配套实验文件怎么用
 
@@ -144,23 +123,7 @@ EasyMysql/
 └── LICENSE                # MIT
 ```
 
-> 改坏了别慌：`powershell -ExecutionPolicy Bypass -File lab/reset.ps1` 30 秒回到出厂设置。
-
-## 参与贡献
-
-这个仓库最有价值的东西是**实验数据**，而不是文字。所以：
-
-- 发现了错误 → 提 [Issue](https://github.com/你的用户名/EasyMysql/issues)，**请附上你跑出来的输出**
-- 想加一篇文章 → 看 [docs/_TEMPLATE.md](docs/_TEMPLATE.md)，照着模板写，并配上 `lab/queries/` 里的实验文件
-- 提 PR 前请自己跑一遍 `lab/verify-queries.ps1`
-
-## 写作原则（也是这个仓库的验收标准）
-
-1. 所有 SQL 都能复制粘贴直接跑，**不写伪代码**
-2. 每篇结论都必须有**真实输出**撑着
-3. 每篇开头先说「**什么时候你会遇到它**」，把知识锚到痛点
-4. 单篇不超过 2000 字，超过就拆上下篇
-5. 造错数据比讲对知识更有说服力
+> 改坏复原：`powershell -ExecutionPolicy Bypass -File lab/reset.ps1` 30 秒回到出厂设置。
 
 ## License
 
