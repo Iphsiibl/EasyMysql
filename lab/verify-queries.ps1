@@ -1,10 +1,10 @@
-# =============================================================================
+﻿# =============================================================================
 # verify-queries.ps1  批量检查 lab/queries/ 下所有实验文件能否正常执行
 #
 # 用法：powershell -ExecutionPolicy Bypass -File lab/verify-queries.ps1
 #
 # 判定标准：
-#   允许出现 3 条错误，它们是教程里「故意写错、用来演示数据库拦截脏数据」的语句。
+#   允许出现 4 条错误，它们是教程里「故意写错、用来演示数据库拦截脏数据」的语句。
 #   任何新增的错误都算失败，退出码返回 1（可以直接接进 CI）。
 # =============================================================================
 
@@ -13,9 +13,10 @@ Set-Location $PSScriptRoot
 
 # 故意写错的语句白名单：文件名 → 允许的错误条数
 $expected = @{
-    "10-demo-types.sql"      = 1   # 字符串金额 SUM 报错
+    "10-demo-types.sql"      = 1   # 字符串金额转 DECIMAL 失败
     "11-demo-constraints.sql" = 1   # 分数超范围被拦截
     "18-demo-transaction.sql" = 1   # 错误语句触发回滚
+    "23-demo-errors.sql"     = 1   # source 在第一条故意错误处中断（文末有对照说明）
 }
 
 $files    = Get-ChildItem "queries\*.sql" | Sort-Object Name
@@ -47,7 +48,7 @@ foreach ($f in $files) {
 
 Write-Host ""
 if ($failures.Count -eq 0) {
-    Write-Host "全部通过。错误总数 $totalErr（3 条为预期内的演示用错误）" -ForegroundColor Green
+    Write-Host ("全部通过。错误总数 {0}（4 条为预期内的演示用错误）" -f $totalErr) -ForegroundColor Green
     exit 0
 }
 else {

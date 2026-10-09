@@ -6,9 +6,9 @@
 [![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **📌 项目状态**：实验环境（Docker）已跑通
-> **23 篇正文的选题表、大纲和配套实验文件已就位，正文正在逐篇撰写中**。
-> 进度见 [NOTES.md](NOTES.md)。欢迎学习你需要的篇目。
+> **📌 项目状态**：实验环境（Docker）已跑通，**23 篇正文 + 3 个附录全部完成**。
+> 每篇的每条结论都在本机 Docker 里实跑截取，`lab/verify-queries.ps1` 一次跑通全部 23 个实验文件。
+> 阅读顺序见 [学习路线](#学习路线)，写作进度和踩坑记录见 [NOTES.md](NOTES.md)。
 
 ---
 
@@ -100,7 +100,7 @@ docker exec easy-mysql mysql -uroot -peasy123 -t -e "source /tmp/13-demo-index.s
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File lab/verify-queries.ps1
-# 期望输出「错误总数: 3」——这 3 条是故意写错的语句，用来演示数据库如何拦截脏数据
+# 期望输出「错误总数 4（4 条为预期内的演示用错误）」——故意写错的语句，用来演示数据库如何拦截脏数据
 ```
 
 ## 目录结构
@@ -115,9 +115,10 @@ EasyMysql/
 ├── lab/                   # ★ 可运行的实验环境
 │   ├── docker-compose.yml # 一键起 MySQL 8.0 + Adminer
 │   ├── init/              # 建表 + 造 80 万行数据
-│   ├── queries/           # 每篇一个配套实验文件（18 个）
+│   ├── queries/           # 每篇一个配套实验文件（23 个）
 │   ├── reset.ps1          # 30 秒重置环境 + 校验行数
 │   ├── verify-queries.ps1 # 批量检查所有实验文件
+│   ├── check-*.ps1        # 发稿自查：正文骨架 / 下一篇链接
 │   └── README.md          # 环境安装 / 重置 / 备份 / 排查
 ├── .github/               # Issue 模板
 └── LICENSE                # MIT

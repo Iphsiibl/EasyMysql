@@ -2,7 +2,8 @@
 
 SET NAMES utf8mb4;
 
--- 用法：在命令行执行  docker exec -i easy-mysql mysql -uroot -peasy123 -t --default-character-set=utf8mb4 < queries/03-demo-select.sql
+-- 用法：docker cp lab/queries/03-demo-select.sql easy-mysql:/tmp/
+--       docker exec easy-mysql mysql -uroot -peasy123 -t --default-character-set=utf8mb4 easy_mysql -e "source /tmp/03-demo-select.sql"
 --       或把整个文件拖进 Adminer / Navicat 的查询窗口
 
 USE easy_mysql;
@@ -28,3 +29,6 @@ SELECT city, COUNT(*) AS 人数 FROM students GROUP BY city ORDER BY 人数 DESC
 
 -- 【7】多列排序：先按城市，同城再按 id
 SELECT name, city, id FROM students ORDER BY city, id LIMIT 12;
+
+-- 【8】去重：200 行里只有 4 个不同的班级名（ORDER BY 保证顺序稳定）
+SELECT DISTINCT class_name FROM students ORDER BY class_name;

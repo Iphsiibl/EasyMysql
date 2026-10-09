@@ -15,6 +15,7 @@ SHOW TABLES;                          -- 看当前库的表
 SHOW CREATE TABLE orders;             -- 看完整建表语句（含索引注释）
 DESC orders;                          -- 看字段结构
 SHOW INDEX FROM orders;               -- 看索引
+SHOW PROCESSLIST;                     -- 看当前连接和正在跑的语句
 SHOW ENGINES;                         -- 看引擎（InnoDB / MyISAM）
 ```
 
@@ -60,7 +61,7 @@ CREATE INDEX idx_a ON t (a);
 CREATE UNIQUE INDEX idx_a ON t (a);
 ALTER TABLE t ADD INDEX idx_ab (a, b);
 ALTER TABLE t DROP INDEX idx_a;
-ALTER TABLE t ADD COLUMN c INT AFTER a;              -- 改字段
+ALTER TABLE t ADD COLUMN c INT AFTER a;              -- 加字段（改名用 CHANGE，改类型用 MODIFY）
 EXPLAIN SELECT ...;                                  -- 看执行计划
 EXPLAIN ANALYZE SELECT ...;                          -- 真跑并计时（8.0.18+）
 SHOW PROFILES;                                       -- 看本会话语句耗时
@@ -75,7 +76,7 @@ ROLLBACK TO s1;
 COMMIT;
 ROLLBACK;
 SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
-SELECT @@autocommit, @@innodb_lock_wait_timeout;      -- 看全局变量
+SELECT @@autocommit, @@innodb_lock_wait_timeout;      -- 查看变量（读到的是会话值）
 ```
 
 ## 用户与权限
@@ -86,7 +87,7 @@ GRANT SELECT, INSERT ON easy_mysql.* TO 'dev'@'%';
 SHOW GRANTS FOR 'dev'@'%';
 REVOKE INSERT ON easy_mysql.* FROM 'dev'@'%';
 DROP USER 'dev'@'%';
-FLUSH PRIVILEGES;
+FLUSH PRIVILEGES;                      -- 只有直接改过 grant 表才需要，GRANT 之后不用
 ```
 
 ## 备份（命令行）
@@ -95,7 +96,14 @@ FLUSH PRIVILEGES;
 mysqldump -uroot -p --single-transaction --databases easy_mysql > b.sql
 mysqldump -uroot -p --no-data easy_mysql > schema.sql
 mysql -uroot -p < b.sql
+
+# 本仓库跑在 Docker 里，等价写法：
+docker exec easy-mysql mysqldump -uroot -peasy123 --single-transaction --databases easy_mysql > b.sql
+docker exec easy-mysql mysql -uroot -peasy123 < b.sql
 ```
+
+> ⚠️ 上面是 bash 写法。PowerShell **没有 `<` 输入重定向**，而且 `>` 会把文件存成 UTF-16，
+> 照抄备份出来的 `b.sql` 恢复时中文全坏。PowerShell 里用 Adminer 导入，或 `docker cp` + `source`（见第 21 篇）。
 
 ## 返回
 

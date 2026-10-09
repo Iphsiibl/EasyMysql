@@ -3,8 +3,8 @@
 > 这是作者自己用的工作台，也是读者的路线图。
 > **状态图例**：`⬜` 待写　`🚧` 写作中　`✅` 已发布　`🔁` 待返工
 
-**当前进度**：正文 **1 / 23** 篇（附录 3 个已完成）　·　**最近更新**：2026-10-05
-**已完成的正文**：[13 · 索引是什么](docs/13-index-what.md)（作为门面文章打磨）
+**当前进度**：正文 **23 / 23** 篇 · 附录 3 个（A2 的 30 道答案也已补全）　·　**最近更新**：2026-10-09
+**全部完成**：`lab/verify-queries.ps1` 全量跑通（23 个实验文件，4 条预期内的演示用错误）。
 
 ---
 
@@ -48,61 +48,61 @@
 
 | # | 文章 | 一句话价值 | 核心钩子 | 涉及表 | 状态 |
 |---|---|---|---|---|---|
-| 01 | [MySQL 是什么](docs/01-what-is-mysql.md) | 装好并连上数据库 | 页面一点保存就报错 | — | ⬜ |
-| 02 | [库/表/行/列](docs/02-db-table-row-column.md) | 说得清数据存在哪 | `Unknown database 'school'` | `students` | ⬜ |
-| 03 | [SELECT 入门](docs/03-select-basics.md) | 只取你要的列 | `SELECT *` 刷屏 200 行 | `students` | ⬜ |
+| 01 | [MySQL 是什么](docs/01-what-is-mysql.md) | 装好并连上数据库 | 页面一点保存就报错 | — | ✅ |
+| 02 | [库/表/行/列](docs/02-db-table-row-column.md) | 说得清数据存在哪 | `Unknown database 'school'` | `students` | ✅ |
+| 03 | [SELECT 入门](docs/03-select-basics.md) | 只取你要的列 | `SELECT *` 刷屏 200 行 | `students` | ✅ |
 
 ### 阶段 ② 查询基本功（目标：能写课程设计的统计 SQL）
 
 | # | 文章 | 一句话价值 | 核心钩子 | 涉及表 | 状态 |
 |---|---|---|---|---|---|
-| 04 | [WHERE 过滤](docs/04-where-filter.md) | 掌握一整套筛选条件 | 200 万行里怎么找到那一小撮 | `students` `scores` | ⬜ |
-| 05 | [排序分页聚合](docs/05-order-limit-aggregate.md) | 会算统计量、会正确分页 | 深分页越翻越慢 | `students` `scores` | ⬜ |
-| 06 | [GROUP BY / HAVING](docs/06-group-by-having.md) | 分组统计 + 分清两者的区别 | 按班算平均分算错了 | `students` `scores` `courses` | ⬜ |
-| 07 | [JOIN](docs/07-join.md) | 拼表，且不出重复行 | 某个学生突然出现 10 次 | `students` `scores` `orders` `order_items` | ⬜ |
-| 08 | [子查询 / UNION](docs/08-subquery-union.md) | 用查询结果当条件 | 想知道「有订单的用户」 | `users` `orders` | ⬜ |
-| 09 | [函数速查](docs/09-functions.md) | 查得到用得上的函数清单 | `WHERE YEAR(x)=2024` 被 review 打回 | `users` `orders` | ⬜ |
+| 04 | [WHERE 过滤](docs/04-where-filter.md) | 掌握一整套筛选条件 | 200 万行里怎么找到那一小撮 | `students` `scores` | ✅ |
+| 05 | [排序分页聚合](docs/05-order-limit-aggregate.md) | 会算统计量、会正确分页 | 深分页越翻越慢 | `students` `scores` | ✅ |
+| 06 | [GROUP BY / HAVING](docs/06-group-by-having.md) | 分组统计 + 分清两者的区别 | 按班算平均分算错了 | `students` `scores` `courses` | ✅ |
+| 07 | [JOIN](docs/07-join.md) | 拼表，且不出重复行 | 某个学生突然出现 10 次 | `students` `scores` `orders` `order_items` | ✅ |
+| 08 | [子查询 / UNION](docs/08-subquery-union.md) | 用查询结果当条件 | 想知道「有订单的用户」 | `users` `orders` | ✅ |
+| 09 | [函数速查](docs/09-functions.md) | 查得到用得上的函数清单 | `WHERE YEAR(x)=2024` 被 review 打回 | `users` `orders` | ✅ |
 
 ### 阶段 ③ 设计一张好表（目标：拿到需求能写 DDL）
 
 | # | 文章 | 一句话价值 | 核心钩子 | 涉及表 | 状态 |
 |---|---|---|---|---|---|
-| 10 | [数据类型怎么选](docs/10-data-types.md) | 看完反面教材就会选 | 查新生查出了 1900 年出生的 | `bad_design_demo` | ⬜ |
-| 11 | [主键外键约束](docs/11-keys-constraints.md) | 让数据库自己挡住脏数据 | 插进了 1500 分的成绩 | `students` `scores` | ⬜ |
-| 12 | [建表军规](docs/12-table-design-rules.md) | 拿到需求先问哪 7 个问题 | 上线三个月要推倒重建 | 全部 | ⬜ |
+| 10 | [数据类型怎么选](docs/10-data-types.md) | 看完反面教材就会选 | 查新生查出了 1900 年出生的 | `bad_design_demo` | ✅ |
+| 11 | [主键外键约束](docs/11-keys-constraints.md) | 让数据库自己挡住脏数据 | 插进了 1500 分的成绩 | `students` `scores` | ✅ |
+| 12 | [建表军规](docs/12-table-design-rules.md) | 拿到需求先问哪 7 个问题 | 上线三个月要推倒重建 | 全部 | ✅ |
 
 ### 阶段 ④ 索引与性能（目标：会定位慢 SQL）
 
 | # | 文章 | 一句话价值 | 核心钩子 | 涉及表 | 状态 |
 |---|---|---|---|---|---|
-| 13 | [索引是什么](docs/13-index-what.md) | 18ms → 0.14ms | 结构数据完全相同，只差一个索引 | `orders` `orders_slow` | ⬜ |
-| 14 | [该不该建索引](docs/14-when-to-index.md) | 拿到字段立刻能判断 | 每个字段都加索引反而更慢 | `orders` | ⬜ |
-| 15 | [EXPLAIN](docs/15-explain.md) | 五秒看出 SQL 慢在哪 | 一条查询跑了 8 秒 | `orders` `scores` | ⬜ |
-| 16 | [慢查询优化实战](docs/16-optimize-slow-query.md) | 一套可复用的优化流程 | 接口要 2 秒，监控告警 | `orders` `order_items` | ⬜ |
-| 17 | [联合索引](docs/17-composite-index.md) | 三个字段只建一个索引 | 索引明明有，key_len 却很短 | `orders` | ⬜ |
+| 13 | [索引是什么](docs/13-index-what.md) | 18ms → 0.14ms | 结构数据完全相同，只差一个索引 | `orders` `orders_slow` | ✅ |
+| 14 | [该不该建索引](docs/14-when-to-index.md) | 拿到字段立刻能判断 | 每个字段都加索引反而更慢 | `orders` | ✅ |
+| 15 | [EXPLAIN](docs/15-explain.md) | 五秒看出 SQL 慢在哪 | 一条查询跑了 8 秒 | `orders` `scores` | ✅ |
+| 16 | [慢查询优化实战](docs/16-optimize-slow-query.md) | 一套可复用的优化流程 | 接口要 2 秒，监控告警 | `orders` `order_items` | ✅ |
+| 17 | [联合索引](docs/17-composite-index.md) | 三个字段只建一个索引 | 索引明明有，key_len 却很短 | `orders` | ✅ |
 
 ### 阶段 ⑤ 事务与并发（目标：理解为什么并发会出错）
 
 | # | 文章 | 一句话价值 | 核心钩子 | 涉及表 | 状态 |
 |---|---|---|---|---|---|
-| 18 | [事务与 ACID](docs/18-transaction.md) | 一次转账为什么不能只扣钱 | 钱扣了对方没收到 | `users` | ⬜ |
-| 19 | [隔离级别](docs/19-isolation-level.md) | 分清四种并发问题 | 读到了从未存在的余额 100 | `users` `orders` | ⬜ |
-| 20 | [锁与死锁](docs/20-locks-lock.md) | 会预防死锁 | 日志里全是 Lock wait timeout | `users` `scores` | ⬜ |
+| 18 | [事务与 ACID](docs/18-transaction.md) | 一次转账为什么不能只扣钱 | 钱扣了对方没收到 | `users` | ✅ |
+| 19 | [隔离级别](docs/19-isolation-level.md) | 分清四种并发问题 | 读到了从未存在的余额 100 | `users` `orders` | ✅ |
+| 20 | [锁与死锁](docs/20-locks-lock.md) | 会预防死锁 | 日志里全是 Lock wait timeout | `users` `scores` | ✅ |
 
 ### 阶段 ⑥ 真实工程（目标：能独立运维一个库）
 
 | # | 文章 | 一句话价值 | 核心钩子 | 涉及表 | 状态 |
 |---|---|---|---|---|---|
-| 21 | [备份与恢复](docs/21-backup-restore.md) | 先假设数据库会消失 | 手一抖 `DROP DATABASE` | 全部 | ⬜ |
-| 22 | [权限与安全](docs/22-permission-security.md) | 别用 root 写代码 | 配置里的 `root/easy123` | `users` `orders` | ⬜ |
-| 23 | [常见报错速查表](docs/23-error-lookup.md) | 报错不用慌，翻表查 | 满屏 `ERROR 1064` | 全部 | ⬜ |
+| 21 | [备份与恢复](docs/21-backup-restore.md) | 先假设数据库会消失 | 手一抖 `DROP DATABASE` | 全部 | ✅ |
+| 22 | [权限与安全](docs/22-permission-security.md) | 别用 root 写代码 | 配置里的 `root/easy123` | `users` `orders` | ✅ |
+| 23 | [常见报错速查表](docs/23-error-lookup.md) | 报错不用慌，翻表查 | 满屏 `ERROR 1064` | 全部 | ✅ |
 
 ### 附录
 
 | # | 文章 | 用途 | 状态 |
 |---|---|---|---|
 | A1 | [常用 SQL 速查表](docs/A1-sql-cheatsheet.md) | 当字典用，**不通读** | ✅ |
-| A2 | [练习题与答案](docs/A2-exercises.md) | 30 道题确认真的学会了 | 🚧 答案只写了 13 道 |
+| A2 | [练习题与答案](docs/A2-exercises.md) | 30 道题确认真的学会了 | ✅ |
 | A3 | [术语中英对照表](docs/A3-glossary.md) | 读英文文档时对号入座 | ✅ |
 
 ---
@@ -135,6 +135,8 @@
 | PowerShell 管道转码 | 中文 SQL 报 1064 语法错误 | 用 `docker cp` 送文件，别用 `Get-Content \| docker exec` |
 | 写死耗时数字 | 换个机器读者对不上，信任感崩了 | 结论用 `EXPLAIN` 的 `rows`，耗时只说数量级 |
 | 加了索引忘了清理 | 下一篇的实验被干扰，优化器行为变了 | 每个演示索引的文末都要 `DROP INDEX` |
+| `.ps1` 存成无 BOM 的 UTF-8 | PowerShell 5.1 按 GBK 读，中文全乱，`$变量（` 的全角括号被吞进变量名 | **带中文的 `.ps1` 必须存 UTF-8 with BOM**（`verify-queries.ps1` 踩过：错误总数一直显示不出来） |
+| 写文章前没跑数据 | 大纲里「及格率 100% 的课」在真实数据里一门都没有 | 题目、结论先实跑，题干和数据矛盾就改题干（A2 改了 4 道） |
 
 ## 下一步（发布前必做）
 

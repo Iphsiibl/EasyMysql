@@ -147,47 +147,57 @@ UNION ALL SELECT 'order_items', COUNT(*) FROM order_items;
 powershell -ExecutionPolicy Bypass -File lab/verify-queries.ps1
 ```
 
-期望输出最后一行是 `错误总数: 3`。这 3 条是**故意写错的语句**，分别在：
+期望输出最后一行是 `错误总数 4（4 条为预期内的演示用错误）`。这 4 条是**故意写错的语句**，分别在：
 
 | 文件 | 行 | 演示什么 |
 |---|---|---|
-| `10-demo-types.sql` | 65 | 字符串金额求和会失败 |
-| `11-demo-constraints.sql` | 12 | 超出范围的分数被拦截 |
-| `18-demo-transaction.sql` | 52 | 错误语句导致事务回滚 |
+| `10-demo-types.sql` | 183 | 字符串金额转 DECIMAL 失败 |
+| `11-demo-constraints.sql` | 158 | 超出范围的分数被拦截 |
+| `18-demo-transaction.sql` | 119 | 错误语句（`balanc` 拼错）导致事务回滚 |
+| `23-demo-errors.sql` | 32 | 报错速查篇：`==` 语法错误示范（文件靠 `--force` 跑完） |
 
-只要错误数还是 3，就说明没引入新问题。超过 3 说明你改坏了什么。
+只要错误数还是 4，就说明没引入新问题。超过 4 说明你改坏了什么。
 
 ---
 
 ## 备份与恢复（第 21 篇的内容，先自己练一遍）
 
+> 这里的命令和 [docs/21-backup-restore.md](../docs/21-backup-restore.md) 一致，都是本机实测过的。
+> **两个不要碰**：PowerShell 的 `>` 会把文件存成 UTF-16、`Get-Content` 管道会按 GBK 转码，
+> 两条路都会把中文 SQL 搞坏 —— 一律用 `--result-file` 让 mysqldump 自己写文件，再 `docker cp` 出来。
+
 ### 备份
 
 ```powershell
-# 全部数据
-docker exec easy-mysql mysqldump -uroot -peasy123 --single-transaction --databases easy_mysql > lab\backup.sql
+# 全部数据（--result-file 在容器内写文件，完全不经 shell 重定向）
+docker exec easy-mysql mysqldump -uroot -peasy123 --single-transaction --databases easy_mysql --result-file=/tmp/easy_mysql_full.sql
+docker cp easy-mysql:/tmp/easy_mysql_full.sql "$env:TEMP\easy_mysql_full.sql"
 
 # 只备份表结构
-docker exec easy-mysql mysqldump -uroot -peasy123 --no-data easy_mysql > lab\schema.sql
+docker exec easy-mysql mysqldump -uroot -peasy123 --no-data easy_mysql --result-file=/tmp/schema.sql
 
-# 只备份某一张表
-docker exec easy-mysql mysqldump -uroot -peasy123 easy_mysql orders > lab\orders.sql
+# 只备份某一张表的数据
+docker exec easy-mysql mysqldump -uroot -peasy123 --no-create-info easy_mysql orders --result-file=/tmp/orders.sql
 ```
 
 ### 恢复
 
+把 dump 文件送进容器，用 `source` 执行 —— 全程字节原样传递：
+
 ```powershell
-Get-Content lab\backup.sql -Raw | docker exec -i easy-mysql mysql -uroot -peasy123 --default-character-set=utf8mb4
+docker cp "$env:TEMP\easy_mysql_full.sql" easy-mysql:/tmp/
+docker exec easy-mysql mysql -uroot -peasy123 --default-character-set=utf8mb4 -e "source /tmp/easy_mysql_full.sql"
 ```
 
-> ⚠️ PowerShell 传文件会转码，中文会坏。**用 Adminer 的导入功能更稳妥。**
+> ⚠️ 恢复演练**别对 `easy_mysql` 本体做**，建个 `easy_mysql_restore` 演练库，练完 `DROP DATABASE easy_mysql_restore`。
+> 完整的「备份 → 删 → 恢复 → 校验行数」演练见第 21 篇第 4 节。
 
 ### 定时备份（Windows 计划任务）
 
 ```powershell
-# backup.ps1
-docker exec easy-mysql mysqldump -uroot -peasy123 --single-transaction --databases easy_mysql |
-  Out-File -FilePath "E:\backup\mysql-$(Get-Date -Format yyyyMMdd-HHmm).sql" -Encoding utf8
+# backup.ps1 —— 同样走 --result-file，不碰 `>`
+docker exec easy-mysql mysqldump -uroot -peasy123 --single-transaction --databases easy_mysql --result-file=/tmp/backup.sql
+docker cp easy-mysql:/tmp/backup.sql "E:\backup\mysql-$(Get-Date -Format yyyyMMdd-HHmm).sql"
 ```
 
 ```powershell
@@ -196,13 +206,15 @@ schtasks /create /tn "MySQL Backup" /tr "powershell -File E:\backup\backup.ps1" 
 
 ### 用 binlog 恢复到某个时间点
 
-本环境已开启 binlog（`--log-bin=binlog`）：
+本环境已开启 binlog（`--log-bin=binlog`），文件挂在 `lab\.data\` 下。注意 **`mysqlbinlog` 不在容器里**，用本机装的那份（免安装版见上文）：
 
 ```powershell
-docker exec easy-mysql ls /var/lib/mysql/binlog*
-docker exec easy-mysql mysqlbinlog --start-datetime="2024-06-01 00:00:00" `
-  /var/lib/mysql/binlog.000003 > E:\backup\binlog.sql
+docker exec easy-mysql mysql -uroot -peasy123 -e "SHOW BINARY LOGS;"   # 先看有哪些文件
+$binlog = "lab\.data\binlog.000003"
+cmd /c "mysqlbinlog --start-datetime=""2026-10-09 10:21:37"" --stop-datetime=""2026-10-09 10:21:40"" $binlog > $env:TEMP\pitr.sql"
 ```
+
+时间窗口换成你自己的事故时间；完整的「回到误删前」演练见第 21 篇第 6 节。
 
 ---
 

@@ -37,15 +37,17 @@ SHOW GRANTS FOR 'app_demo'@'%';
 -- ============================================================
 -- 3. ★ 验证权限真的生效（换个客户端连进去试）
 -- ============================================================
--- 在另一个终端执行，把 ro_demo 换成 app_demo / ops_demo 试：
+-- 权限不是靠 SHOW GRANTS "看着对"就算数的，要用真账号连一次。
+-- 在另一个 PowerShell 窗口执行（正文里原样跑过）：
 --
---   docker exec -it easy-mysql mysql -uro_demo -p'Ro#Demo2026' easy_mysql
+--   docker exec easy-mysql mysql -uro_demo -p"Ro#Demo2026" -t easy_mysql -e "SELECT COUNT(*) FROM users;"
+--   docker exec easy-mysql mysql -uro_demo -p"Ro#Demo2026" -t easy_mysql -e "DELETE FROM users WHERE id = 1;"
+--   docker exec easy-mysql mysql -uro_demo -p"Ro#Demo2026" -t easy_mysql -e "USE mysql;"
 --
--- 登录后依次执行：
---   SELECT COUNT(*) FROM orders;                 -- 成功
---   INSERT INTO orders (...) VALUES (...);       -- ERROR 1142: INSERT command denied
---   DELETE FROM app_demo_anything;               -- ERROR 1142: DELETE command denied
---   DROP TABLE orders;                           -- ERROR 1142 / 1143
+-- 期望：第一条返回 5000，第二条
+--   ERROR 1142 (42000) at line 1: DELETE command denied to user 'ro_demo'@'localhost' for table 'users'
+-- 第三条
+--   ERROR 1044 (42000) at line 1: Access denied for user 'ro_demo'@'%' to database 'mysql'
 --
 -- ★ 关键点：ro_demo 连 DROP 都不行。
 --   就算你代码里拼错了 SQL，最坏结果也只是「权限不足」，
@@ -62,6 +64,13 @@ CREATE USER IF NOT EXISTS 'ro_demo'@'192.168.1.%' IDENTIFIED BY 'Ro#Demo2026';
 SHOW GRANTS FOR 'ro_demo'@'192.168.1.%';
 -- '%' 表示任意主机，生产环境务必限制
 
+-- 内网只读账号：只认 192.168.1 网段（正文第 4 节跑过）
+CREATE USER IF NOT EXISTS 'lan_ro'@'192.168.1.%' IDENTIFIED BY 'Lan#Demo2026';
+SHOW GRANTS FOR 'lan_ro'@'192.168.1.%';
+-- 从别的网段连过去，密码全对也进不来：
+--   docker exec easy-mysql mysql -ulan_ro -p"Lan#Demo2026" -h 127.0.0.1 -t easy_mysql -e "SELECT 1;"
+--   ERROR 1045 (28000): Access denied for user 'lan_ro'@'127.0.0.1' (using password: YES)
+
 -- ============================================================
 -- 5. 改密码 / 删用户
 -- ============================================================
@@ -70,6 +79,7 @@ DROP USER IF EXISTS 'ro_demo'@'%';
 DROP USER IF EXISTS 'ro_demo'@'192.168.1.%';
 DROP USER IF EXISTS 'app_demo'@'%';
 DROP USER IF EXISTS 'ops_demo'@'%';
+DROP USER IF EXISTS 'lan_ro'@'192.168.1.%';
 FLUSH PRIVILEGES;
 SELECT user, host FROM mysql.user;
 
@@ -96,7 +106,21 @@ SELECT user, host FROM mysql.user;
 -- 模拟一下拼接的效果（看清楚就好，别真拿去连生产库）
 SELECT id, username FROM users LIMIT 3;
 -- 相当于 WHERE username = '' OR '1'='1'，结果就是全表
-SELECT COUNT(*) AS 全表条数 FROM users WHERE username = '' OR '1'='1';
+SELECT COUNT(*) AS 拼接出来的结果 FROM users WHERE username = '' OR '1'='1';
+
+-- ✅ 预编译参数化：同样的输入，换 PREPARE 再跑一遍
+PREPARE login FROM 'SELECT COUNT(*) FROM users WHERE username = ?';
+SET @input = ''' OR ''1'' = ''1''';
+EXECUTE login USING @input;              -- 攻击载荷被当成普通字符串，0 行
+SET @input = 'user_00001';
+EXECUTE login USING @input;              -- 正常用户名，1 行
+DEALLOCATE PREPARE login;
+
+-- ✅ 白名单：ORDER BY / LIMIT 这种没法用 ? 的地方，只认名单里的值
+SET @sort = 'age';
+SELECT IF(@sort IN ('id','age','balance'), CONCAT('允许：按 ', @sort, ' 排序'), '拒绝：不在白名单里') AS 检查;
+SET @sort = 'id; DROP TABLE users';
+SELECT IF(@sort IN ('id','age','balance'), CONCAT('允许：按 ', @sort, ' 排序'), '拒绝：不在白名单里') AS 检查;
 
 -- ============================================================
 -- 7. 其他安全清单

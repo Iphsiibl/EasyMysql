@@ -1,115 +1,266 @@
--- 16-demo-optimize.sql · 第 16 篇配套实验：5 条慢 SQL 优化实战
+-- 16-demo-optimize.sql · 第 16 篇配套实验：慢查询优化实战
+-- 结构 = 文章的四步流程：抓 → 分析 → 开方 → 验证
+-- 自清理：临时索引全部 DROP、汇总表 DROP、存储过程 DROP、插入的行全部 DELETE、
+--         会话变量 long_query_time 恢复原值，末尾跑基线校验
+-- 计时用 NOW(6)（和 14 号实验一致），每条先暖一遍缓存再计时
 
 SET NAMES utf8mb4;
-
--- 用法：先跑一遍 EXPLAIN 和 SHOW PROFILES 看现状，再按注释里的方案改写，对比前后
 
 USE easy_mysql;
 
 -- ============================================================
--- 慢 SQL ① 缺索引：type = ALL
+-- 第 1 步：抓 —— 慢查询日志实况
 -- ============================================================
-EXPLAIN SELECT COUNT(*) FROM orders WHERE amount > 5000;   -- type=ALL, rows≈100000
+SHOW VARIABLES LIKE 'slow_query_log';
+SHOW VARIABLES LIKE 'slow_query_log_file';
+SHOW VARIABLES LIKE 'long_query_time';
+SHOW VARIABLES LIKE 'log_output';
 
--- 优化：加索引
-ALTER TABLE orders ADD INDEX idx_amount (amount);
-EXPLAIN SELECT COUNT(*) FROM orders WHERE amount > 5000;   -- type=range, rows 骤降
+-- ★ 先记下原值（会话级改动，但照样恢复回去）
+SET @old_lqt = @@SESSION.long_query_time;
 
-SET profiling = 1;
+-- 阈值调到 0（只对当前会话生效），把 4 条候选 SQL 放进日志
+SET SESSION long_query_time = 0;
 SELECT COUNT(*) FROM orders WHERE amount > 5000;
-SHOW PROFILES;
--- 本机约 0.031s → 0.011s。绝对值因机器而异，
--- 但 EXPLAIN 的 rows 从 ~10 万降到 1 万上下，这个是稳定的。
-
-ALTER TABLE orders DROP INDEX idx_amount;   -- 清理（留着会影响第 17 篇的实验）
-
--- ============================================================
--- 慢 SQL ② 深分页：LIMIT 100000, 10
--- ============================================================
-SET profiling = 1;
 SELECT id, user_id, amount FROM orders ORDER BY id LIMIT 100000, 10;
-SHOW PROFILES;
--- 数据库必须先读出并丢弃前 10 万行
-
--- 优化 A：延迟关联（覆盖索引先取 id，再回表取整行）
-SET profiling = 1;
-SELECT o.* FROM orders o
-JOIN (SELECT id FROM orders ORDER BY id LIMIT 100000, 10) t ON t.id = o.id;
-SHOW PROFILES;
-
--- 优化 B：书签式分页（记住上次看到的位置，无 LIMIT OFFSET）
-SET profiling = 1;
-SELECT id, user_id, amount FROM orders WHERE id > 199990 ORDER BY id LIMIT 10;
-SHOW PROFILES;
--- 这是最快的一种分页，第 17 篇展开讲原理
-
--- ============================================================
--- 慢 SQL ③ 排序字段没索引：Using filesort
--- ============================================================
-EXPLAIN SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
--- Extra: Using filesort
-
--- 优化：建 (status, amount) 联合索引，让排序走索引
-ALTER TABLE orders ADD INDEX idx_status_amount (status, amount);
-EXPLAIN SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
--- Extra 里的 Using filesort 消失，type 变成 range
-SET profiling = 1;
 SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
-SHOW PROFILES;
-ALTER TABLE orders DROP INDEX idx_status_amount;   -- 清理
+SELECT COUNT(*) FROM orders o JOIN order_items i ON i.order_id = o.id;
+SET SESSION long_query_time = @old_lqt;
+SHOW VARIABLES LIKE 'long_query_time';
+
+-- 日志是文件，得去容器里看（文件名以你上面 SHOW VARIABLES 的输出为准）：
+--   docker exec easy-mysql sh -c 'tail -n 40 /var/lib/mysql/<容器ID>-slow.log'
+--   docker exec easy-mysql sh -c 'grep Query_time /var/lib/mysql/<容器ID>-slow.log | sort -rn -k3 | head -5'
+-- pt-query-digest 本镜像没装（连 perl 都没有），见文章第 1 节的安装指引
 
 -- ============================================================
--- 慢 SQL ④ 索引下推没利用：复合条件
+-- 第 2 步：分析 —— 5 条慢 SQL 的"病历"（都是优化前的计划）
 -- ============================================================
--- 优化器选了 idx_orders_status_created（status 只有 4 个值，要扫 5 万行）
-SET profiling = 1;
-SELECT COUNT(*) FROM orders WHERE status = 'paid' AND user_id = 42;
-SHOW PROFILES;
--- 先看清优化器到底选了哪个索引：
-EXPLAIN SELECT COUNT(*) FROM orders WHERE status = 'paid' AND user_id = 42;
--- 如果 key = idx_orders_status_created，rows 会是 4 万上下（等于扫描量）
 
--- 但 user_id=42 只有 29 单，用 idx_orders_user 明显更合适
-SET profiling = 1;
-SELECT COUNT(*) FROM orders FORCE INDEX (idx_orders_user) WHERE status = 'paid' AND user_id = 42;
-SHOW PROFILES;
-EXPLAIN SELECT COUNT(*) FROM orders FORCE INDEX (idx_orders_user) WHERE status='paid' AND user_id=42;
--- 这时 key = idx_orders_user，rows 只有 29
--- ★ 用 rows 判断，别用耗时判断（耗时会被缓存和机器性能干扰）
+-- 慢 SQL ①：amount 没索引，全表扫描
+EXPLAIN SELECT COUNT(*) FROM orders WHERE amount > 5000;
 
--- 更好的办法不是 FORCE INDEX，而是换个联合索引顺序
--- 详见第 17 篇
+-- 慢 SQL ②：深分页，先扫掉前 10 万行
+EXPLAIN ANALYZE SELECT id, user_id, amount FROM orders ORDER BY id LIMIT 100000, 10\G
 
--- ============================================================
--- 慢 SQL ⑤ COUNT(*) 太慢 / OR 拖后腿
--- ============================================================
--- OR 的问题：amount 没索引，整个查询放弃索引
+-- 慢 SQL ③：排序字段不在索引里 → Using filesort
+EXPLAIN SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
+
+-- 慢 SQL ④：两个索引都能用，优化器挑了带 filesort 的那个
+EXPLAIN SELECT * FROM orders WHERE status = 'paid' AND user_id BETWEEN 1 AND 100 ORDER BY user_id;
+
+-- 慢 SQL ⑤：OR 的一边没有索引 → 整条放弃索引
 EXPLAIN SELECT * FROM orders WHERE user_id = 42 OR amount > 5000;
 
--- 改写 1：UNION ALL（两个分支各走各的索引）
-EXPLAIN SELECT * FROM orders WHERE user_id = 42
+-- ============================================================
+-- 第 3 步：开方 —— 逐条优化（每条都是前后对照）
+-- ============================================================
+
+-- ---------- 慢 SQL ① 缺索引：加索引 ----------
+SELECT COUNT(*) FROM orders WHERE amount > 5000;          -- 暖缓存
+SET @t0 = NOW(6);
+SELECT COUNT(*) FROM orders WHERE amount > 5000;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 优化前_毫秒;
+
+ALTER TABLE orders ADD INDEX idx_amount (amount);
+EXPLAIN SELECT COUNT(*) FROM orders WHERE amount > 5000;   -- type=range，rows 从 199430 掉到 83030
+
+SELECT COUNT(*) FROM orders WHERE amount > 5000;          -- 暖缓存
+SET @t0 = NOW(6);
+SELECT COUNT(*) FROM orders WHERE amount > 5000;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 优化后_毫秒;
+
+ALTER TABLE orders DROP INDEX idx_amount;   -- 清理（留着会干扰第 17 篇）
+
+-- ---------- 慢 SQL ② 深分页：三种写法（按主键排序） ----------
+-- (a) 原始：扫 100010 行
+EXPLAIN ANALYZE SELECT id, user_id, amount FROM orders ORDER BY id LIMIT 100000, 10\G
+-- (b) 延迟关联：内层只取主键、外层回表 10 次，但本例的列都在主键索引里 → 还是扫 100010 行
+EXPLAIN ANALYZE SELECT o.* FROM orders o
+JOIN (SELECT id FROM orders ORDER BY id LIMIT 100000, 10) t ON t.id = o.id\G
+-- (c) 书签式（keyset）：从 id 直接定位，只碰 10 行
+EXPLAIN ANALYZE SELECT id, user_id, amount FROM orders WHERE id > 199990 ORDER BY id LIMIT 10\G
+
+SELECT id, user_id, amount FROM orders ORDER BY id LIMIT 100000, 10;
+SET @t0 = NOW(6);
+SELECT id, user_id, amount FROM orders ORDER BY id LIMIT 100000, 10;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 原始分页_毫秒;
+
+SELECT id, user_id, amount FROM orders WHERE id > 199990 ORDER BY id LIMIT 10;
+SET @t0 = NOW(6);
+SELECT id, user_id, amount FROM orders WHERE id > 199990 ORDER BY id LIMIT 10;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 书签式分页_毫秒;
+
+-- 换个排序列（按 user_id 排），延迟关联才开始发力：
+-- (a) 原始：全表扫 200000 行 + filesort
+EXPLAIN ANALYZE SELECT * FROM orders ORDER BY user_id LIMIT 100000, 10\G
+-- (b) 延迟关联：走覆盖索引扫 100010 行，外层只回表 10 次
+EXPLAIN ANALYZE SELECT o.* FROM orders o
+JOIN (SELECT id FROM orders ORDER BY user_id LIMIT 100000, 10) t ON t.id = o.id\G
+
+SELECT * FROM orders ORDER BY user_id LIMIT 100000, 10;
+SET @t0 = NOW(6);
+SELECT * FROM orders ORDER BY user_id LIMIT 100000, 10;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 原始分页_user排序_毫秒;
+
+SELECT o.* FROM orders o JOIN (SELECT id FROM orders ORDER BY user_id LIMIT 100000, 10) t ON t.id = o.id;
+SET @t0 = NOW(6);
+SELECT o.* FROM orders o JOIN (SELECT id FROM orders ORDER BY user_id LIMIT 100000, 10) t ON t.id = o.id;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 延迟关联_user排序_毫秒;
+
+-- ---------- 慢 SQL ③ Using filesort：建联合索引让排序走索引 ----------
+EXPLAIN SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
+
+SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;   -- 暖缓存
+SET @t0 = NOW(6);
+SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 建索引前_毫秒;
+
+ALTER TABLE orders ADD INDEX idx_status_amount (status, amount);
+EXPLAIN SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
+-- Extra 里的 Using filesort 消失了，Backward index scan = 反向扫索引就够
+
+SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
+SET @t0 = NOW(6);
+SELECT id, amount FROM orders WHERE status = 'paid' ORDER BY amount DESC LIMIT 10;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 建索引后_毫秒;
+
+ALTER TABLE orders DROP INDEX idx_status_amount;   -- 清理
+
+-- ---------- 慢 SQL ④ 优化器选错索引：FORCE INDEX 只是止痛 ----------
+EXPLAIN SELECT * FROM orders WHERE status = 'paid' AND user_id BETWEEN 1 AND 100 ORDER BY user_id;
+EXPLAIN SELECT * FROM orders FORCE INDEX (idx_orders_user)
+WHERE status = 'paid' AND user_id BETWEEN 1 AND 100 ORDER BY user_id;
+
+-- 看实际扫描量和真实耗时（EXPLAIN ANALYZE 会真跑一遍）
+EXPLAIN ANALYZE SELECT * FROM orders WHERE status = 'paid' AND user_id BETWEEN 1 AND 100 ORDER BY user_id\G
+EXPLAIN ANALYZE SELECT * FROM orders FORCE INDEX (idx_orders_user)
+WHERE status = 'paid' AND user_id BETWEEN 1 AND 100 ORDER BY user_id\G
+-- 为什么选错、比 FORCE INDEX 更好的办法：第 17 篇
+
+-- ---------- 慢 SQL ⑤ OR 拖后腿：改写 UNION ALL ----------
+EXPLAIN SELECT * FROM orders WHERE user_id = 42 OR amount > 5000;
+EXPLAIN SELECT id, user_id, amount FROM orders WHERE user_id = 42
 UNION ALL
-SELECT * FROM orders WHERE amount > 5000;
-
--- 改写 2：给 amount 也建索引，让优化器自己选
--- （本数据集 20 万行，UNION ALL 反而可能更慢，因为返回行数多。
---   这也是一个重要结论：优化要看真实数据量，不能想当然）
-
--- COUNT(*) 的优化思路
-SET profiling = 1;
-SELECT COUNT(*) FROM orders;          -- InnoDB 会扫一遍
-SHOW PROFILES;
--- 生产上的做法：
---   1. 估算值：EXPLAIN SELECT * FROM orders;  看 rows
---   2. 汇总表：单独维护一张 cnt 表，插入订单时 +1
---   3. 缓存：数据不动就不查
+SELECT id, user_id, amount FROM orders WHERE amount > 5000;
+-- 注意：UNION ALL 第二个分支还是全表扫，省掉的只是"整条查询被 OR 拖死"这件事
 
 -- ============================================================
--- ★ 别过度优化：本仓库大部分查询都在 20 毫秒以内
+-- 实战二：批量写入 —— 攒批 + 事务（插完就删干净）
 -- ============================================================
-SET profiling = 1;
+DELIMITER $$
+CREATE PROCEDURE ins_one_by_one(IN n INT)
+BEGIN
+  DECLARE i INT DEFAULT 0;
+  WHILE i < n DO
+    INSERT INTO orders_slow (user_id, product_id, quantity, amount, status, created_at, updated_at)
+    VALUES (1, 1, 1, 10.00, 'created', '2024-06-01 12:00:00', '2024-06-01 13:00:00');
+    SET i = i + 1;
+  END WHILE;
+END$$
+CREATE PROCEDURE ins_batch_tx(IN n INT)
+BEGIN
+  DECLARE i INT DEFAULT 0;
+  START TRANSACTION;
+  WHILE i < n DO
+    INSERT INTO orders_slow (user_id, product_id, quantity, amount, status, created_at, updated_at)
+    VALUES (1, 1, 1, 10.00, 'created', '2024-06-01 12:00:00', '2024-06-01 13:00:00');
+    SET i = i + 1;
+  END WHILE;
+  COMMIT;
+END$$
+DELIMITER ;
+
+-- A：每条 INSERT 各自提交一次（默认 autocommit=1）→ 2000 次提交
+SET @t0 = NOW(6);
+CALL ins_one_by_one(2000);
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 逐条插入2000行_毫秒;
+
+-- B：同样 2000 条，攒在一个事务里 → 1 次提交
+SET @t0 = NOW(6);
+CALL ins_batch_tx(2000);
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 攒批事务2000行_毫秒;
+
+-- ★ 现场恢复：删掉这 4000 行
+SELECT COUNT(*) AS 插入后行数 FROM orders_slow;
+DELETE FROM orders_slow WHERE id > 200000;
+SELECT COUNT(*) AS 删除后行数 FROM orders_slow;
+ANALYZE TABLE orders_slow;
+
+DROP PROCEDURE ins_one_by_one;
+DROP PROCEDURE ins_batch_tx;
+SHOW PROCEDURE STATUS WHERE Db = 'easy_mysql';   -- 期望：空
+
+-- ============================================================
+-- 实战三：COUNT(*) 太慢的三个对策（这里实测其中两个）
+-- ============================================================
+
+-- 对策 1：近似值 —— 不数了，直接看执行计划估的行数
+EXPLAIN SELECT * FROM orders;
+SELECT TABLE_ROWS AS 估算行数 FROM information_schema.TABLES
+ WHERE TABLE_SCHEMA = 'easy_mysql' AND TABLE_NAME = 'orders';
+SELECT COUNT(*) AS 精确行数 FROM orders;
+
+-- 对策 2：汇总表 —— 每天一行，365 行代替 20 万行
+CREATE TABLE orders_cnt_daily (
+  day DATE NOT NULL PRIMARY KEY,
+  total INT NOT NULL
+) ENGINE=InnoDB;
+INSERT INTO orders_cnt_daily (day, total)
+SELECT DATE(created_at), COUNT(*) FROM orders GROUP BY DATE(created_at);
+
+EXPLAIN SELECT total FROM orders_cnt_daily WHERE day = '2024-07-01';
+EXPLAIN SELECT COUNT(*) FROM orders
+ WHERE created_at >= '2024-07-01' AND created_at < '2024-07-02';
+
+SELECT COUNT(*) FROM orders;                      -- 暖缓存
+SET @t0 = NOW(6);
+SELECT COUNT(*) FROM orders;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 全表COUNT_毫秒;
+
+SET @t0 = NOW(6);
+SELECT total FROM orders_cnt_daily WHERE day = '2024-07-01';
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS 查汇总表_毫秒;
+
+DROP TABLE orders_cnt_daily;
+SHOW TABLES LIKE 'orders_cnt%';   -- 期望：空
+
+-- ============================================================
+-- 别过度优化：本仓库大部分查询本来就在毫秒级以下
+-- ============================================================
 SELECT COUNT(*) FROM users;
+SET @t0 = NOW(6);
+SELECT COUNT(*) FROM users;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS count_users_毫秒;
+
 SELECT COUNT(*) FROM scores;
+SET @t0 = NOW(6);
+SELECT COUNT(*) FROM scores;
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS count_scores_毫秒;
+
 SELECT name, city FROM students WHERE city = '北京';
-SHOW PROFILES;
--- 结论：80% 的「慢」是网络和客户端的问题，不是数据库的问题
+SET @t0 = NOW(6);
+SELECT name, city FROM students WHERE city = '北京';
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS students北京_毫秒;
+
+SELECT COUNT(*) FROM students WHERE name = '王伟';
+SET @t0 = NOW(6);
+SELECT COUNT(*) FROM students WHERE name = '王伟';
+SELECT ROUND(TIMESTAMPDIFF(MICROSECOND,@t0,NOW(6))/1000,1) AS students王伟_毫秒;
+
+-- ============================================================
+-- 收尾自检：行数、索引、变量全部回到基线
+-- ============================================================
+SELECT COUNT(*) AS students行数 FROM students;
+SELECT COUNT(*) AS courses行数 FROM courses;
+SELECT COUNT(*) AS scores行数 FROM scores;
+SELECT COUNT(*) AS users行数 FROM users;
+SELECT COUNT(*) AS orders行数 FROM orders;
+SELECT COUNT(*) AS orders_slow行数 FROM orders_slow;
+SELECT COUNT(*) AS order_items行数 FROM order_items;
+SELECT COUNT(*) AS bad_design_demo行数 FROM bad_design_demo;
+SHOW INDEX FROM orders;
+SHOW INDEX FROM orders_slow;
+SHOW TABLES LIKE 'orders_cnt%';
+SHOW PROCEDURE STATUS WHERE Db = 'easy_mysql';
+SHOW VARIABLES LIKE 'long_query_time';

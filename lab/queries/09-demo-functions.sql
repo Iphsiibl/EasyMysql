@@ -23,11 +23,21 @@ GROUP BY 月份
 ORDER BY 月份 LIMIT 5;
 
 -- ===== ★★ 反模式 vs 正确写法（重点）=====
--- 反模式：对索引列套函数，索引直接失效
+-- 反模式：对索引列套函数，只能全索引扫（type=index, rows=199430）
 EXPLAIN SELECT COUNT(*) FROM orders WHERE YEAR(created_at) = 2024;
--- 正确：改成范围条件，走索引 idx_orders_status_created 的后半段
+-- 正确：改成范围条件，type 变 range，rows 降到 22154
 EXPLAIN SELECT COUNT(*) FROM orders
 WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01';
+
+-- 按年看不出差别（本库订单全在 2024 年），按月对比最清楚
+EXPLAIN SELECT COUNT(*) FROM orders WHERE MONTH(created_at) = 6;
+EXPLAIN SELECT COUNT(*) FROM orders
+WHERE created_at >= '2024-06-01' AND created_at < '2024-07-01';
+
+-- 联合索引 (status, created_at) 的对照：看 key_len 就知道第 2 列用没用上
+EXPLAIN SELECT COUNT(*) FROM orders WHERE status = 'paid' AND YEAR(created_at) = 2024;
+EXPLAIN SELECT COUNT(*) FROM orders
+WHERE status = 'paid' AND created_at >= '2024-06-01' AND created_at < '2024-07-01';
 
 -- ===== DATEDIFF：距今天多少天 =====
 SELECT name, birth_date, DATEDIFF(CURDATE(), birth_date) AS 出生天数
@@ -42,6 +52,12 @@ SELECT id, remark, IFNULL(remark, '（空）')      AS 用_IFNULL,
        NULLIF(remark, '教学用反面教材')           AS 用_NULLIF
 FROM bad_design_demo LIMIT 3;
 -- IFNULL 只能接 1 个兜底值；COALESCE 可以接多个，优先用 COALESCE
+-- 本数据集 20 行的 remark / extra 都有值（没有真 NULL），所以补一组字面量演示
+SELECT IFNULL(NULL, '（空）')                        AS 用_IFNULL,
+       COALESCE(NULL, '中间值', '（兜底）')           AS 用_COALESCE,
+       NULLIF('教学用反面教材', '教学用反面教材')      AS 用_NULLIF;
+-- 聚合函数会跳过 NULL：80 和 90 的平均是 85，NULL 不参与也不报错
+SELECT AVG(x) AS 平均分 FROM (SELECT 80 AS x UNION ALL SELECT 90 UNION ALL SELECT NULL) t;
 
 -- ===== ★ CASE WHEN 做分类（本篇最容易出成果的技巧）=====
 SELECT s.name,

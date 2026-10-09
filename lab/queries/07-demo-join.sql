@@ -39,19 +39,36 @@ DELETE FROM students WHERE id = 999;    -- 清理
 
 -- ===== ★★ LEFT JOIN 的头号坑：ON 和 WHERE 的区别 =====
 -- 需求：查所有学生的成绩，但只要及格的
--- 写法 A（正确）：条件写在 ON 里，LEFT 语义保留
+-- 写法 A（正确）：条件写在 ON 里，配不上的行补 NULL，LEFT 语义保留
 SELECT s.name, sc.score
 FROM students s
-JOIN scores sc ON sc.student_id = s.id AND sc.score >= 60
+LEFT JOIN scores sc ON sc.student_id = s.id AND sc.score >= 60
 LIMIT 5;
 
 -- 写法 B（写成了 INNER 的效果）：条件写在 WHERE 里
--- LEFT JOIN 被降级成 INNER JOIN，「没考试的学生」被 WHERE 过滤掉了
+-- LEFT JOIN 被降级成 INNER JOIN，配不上 60 分的学生被 WHERE 整行删掉
 SELECT s.name, sc.score
 FROM students s
 LEFT JOIN scores sc ON sc.student_id = s.id
 WHERE sc.score >= 60
 LIMIT 5;
+
+-- ===== ★ 换成 LEFT JOIN + 95 分，ON 和 WHERE 的差别才看得见 =====
+-- 60 分这条线上面两条结果一样（本数据集人人有及格成绩，两边都返回 1332 行）
+-- 95 分这条线：65 个学生一门 95+ 都没有
+-- 写法 A：条件在 ON —— 200 个学生一个不少，配不上的用 NULL 补位
+SELECT COUNT(*) AS 行数, SUM(sc.id IS NULL) AS 其中NULL行
+FROM students s LEFT JOIN scores sc ON sc.student_id = s.id AND sc.score >= 95;
+
+-- 写法 B：条件在 WHERE —— 这 65 个学生被整个删掉，LEFT 已经退化成 INNER
+SELECT COUNT(*) AS 行数
+FROM students s LEFT JOIN scores sc ON sc.student_id = s.id
+WHERE sc.score >= 95;
+
+-- NULL 补位的行长这样
+SELECT s.id, s.name, sc.score
+FROM students s LEFT JOIN scores sc ON sc.student_id = s.id AND sc.score >= 95
+WHERE sc.id IS NULL LIMIT 3;
 
 -- ===== ★ JOIN 出重复行：一对多 =====
 -- 一个订单有 3 条明细，JOIN 后订单出现了 3 次
@@ -82,3 +99,20 @@ FROM orders o
 JOIN users u       ON u.id = o.user_id
 JOIN order_items i ON i.order_id = o.id
 WHERE o.id = 1;
+
+-- ===== 驱动表：EXPLAIN 里排第一的就是它 =====
+EXPLAIN SELECT u.username, o.id AS 订单号, i.product_name, i.quantity
+FROM orders o
+JOIN users u       ON u.id = o.user_id
+JOIN order_items i ON i.order_id = o.id
+WHERE o.id = 1;
+
+-- ===== 补充：200 个学生人人有成绩，换张表体会 LEFT JOIN =====
+-- 20 门课里有 10 门一个学生都没选过 —— 同一套「左表全留、右表补 NULL」语义
+SELECT c.id, c.name, c.teacher
+FROM courses c LEFT JOIN scores sc ON sc.course_id = c.id
+WHERE sc.id IS NULL;
+
+-- INNER JOIN 写同一件事：10 门没人选的课会无声无息地消失
+SELECT COUNT(DISTINCT c.id) AS INNER版只剩这么多门课
+FROM courses c JOIN scores sc ON sc.course_id = c.id;

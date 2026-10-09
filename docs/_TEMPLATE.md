@@ -136,3 +136,4 @@ docker exec easy-mysql mysql -uroot -peasy123 -t -e "source /tmp/NN-demo-xxx.sql
 - [ ] 在 `NOTES.md` 登记了状态
 - [ ] `docs/` 里前后篇的「上一篇/下一篇」链接没断
 - [ ] 跑一遍 `lab/verify-queries.ps1`，错误数没有增加
+- [ ] 跑 `lab/check-links.ps1` 和 `lab/check-structure.ps1`，两者都输出 0 个问题
